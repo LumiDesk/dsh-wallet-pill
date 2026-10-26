@@ -29,7 +29,8 @@ dist/              # 构建产物，不入库
 **样式**
 
 - 所有样式集中在 `src/client/styles.ts`，以 `<style data-plugin="wallet-pill">` 注入
-- Never 使用内联样式
+- Never 使用内联样式；唯一例外是 portal 浮层的定位坐标（`left` / `top` / `visibility`），
+  颜色、字号、间距一律回 `styles.ts`
 - Never 硬编码颜色值，只能用 `--dsw-*` 主题 token
 
 **导入**
@@ -57,7 +58,7 @@ Client 产物必须保持 `window.__ModuleLoader__.load({id, factory(require){�
 - Never 修改 `dist/` 构建产物；改 `src/` 后重新 `pnpm build`
 - Never 修改 `pnpm-lock.yaml`（只有依赖变更才由 pnpm 重写）
 - Never 在组件内使用 `any`
-- Never 使用内联样式
+- Never 使用内联样式（portal 定位坐标除外）
 - Never 硬编码颜色值
 - Never 在渲染路径中执行耗时操作（取数放 effect，不放 render）
 - Never 在列表渲染中省略 `key`

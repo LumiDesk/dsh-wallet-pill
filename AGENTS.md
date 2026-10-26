@@ -14,6 +14,7 @@ src/
 scripts/           # build-client.mjs（esbuild 打包）、release.mjs（发版）
 test/              # node --test 测试与 TS 项目
 locale/            # 插件元数据（zh / en）
+docs/assets/       # README 截图（深色 / 浅色）
 dist/              # 构建产物，不入库
 ```
 

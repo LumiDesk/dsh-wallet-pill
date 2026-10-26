@@ -49,9 +49,16 @@ DeepSeek Harness 的余额胶囊：在输入框下方显示账户余额，点开
 
 ## 安装
 
+已发布到 npm：[`dsh-wallet-pill`](https://www.npmjs.com/package/dsh-wallet-pill)，当前版本 `1.0.0`。
+
 ```bash
+# 桌面端
 dsh plugin --profile desktop add dsh-wallet-pill
+# CLI / Web
+dsh plugin --profile web add dsh-wallet-pill
 ```
+
+需要固定版本时写成 `dsh-wallet-pill@1.0.0`。
 
 装好后需要重启 Harness 进程（Host 侧改动不是刷新页面就能生效），再刷新页面。
 

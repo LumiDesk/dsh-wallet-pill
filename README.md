@@ -2,10 +2,10 @@
 
 [![npm version](https://img.shields.io/npm/v/dsh-wallet-pill.svg)](https://www.npmjs.com/package/dsh-wallet-pill)
 [![npm downloads](https://img.shields.io/npm/dm/dsh-wallet-pill.svg)](https://www.npmjs.com/package/dsh-wallet-pill)
-[![license](https://raw.githubusercontent.com/LumiDesk/dsh-wallet-pill/main/docs/assets/badges/license.svg)](LICENSE)
-[![node](https://raw.githubusercontent.com/LumiDesk/dsh-wallet-pill/main/docs/assets/badges/node.svg)](https://nodejs.org)
-[![TypeScript](https://raw.githubusercontent.com/LumiDesk/dsh-wallet-pill/main/docs/assets/badges/typescript.svg)](https://www.typescriptlang.org)
-[![DSH](https://raw.githubusercontent.com/LumiDesk/dsh-wallet-pill/main/docs/assets/badges/dsh.svg)](https://github.com/deepseek-ai/deepseek-harness)
+[![license](https://img.shields.io/npm/l/dsh-wallet-pill.svg)](LICENSE)
+[![node](https://img.shields.io/badge/node-%3E%3D22-5FA04E?logo=node.js&logoColor=white)](https://nodejs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![DSH](https://img.shields.io/badge/DSH-%3E%3D0.2.1--rc.3-4D6BFE)](https://github.com/deepseek-ai/deepseek-harness)
 [![stars](https://img.shields.io/github/stars/LumiDesk/dsh-wallet-pill.svg)](https://github.com/LumiDesk/dsh-wallet-pill/stargazers)
 
 DeepSeek Harness 的余额胶囊：在输入框下方显示账户余额，点开查看峰谷价目与切换倒计时。零配置、不落盘。
@@ -102,7 +102,7 @@ scripts/build-client.mjs Client 的 IIFE 打包
 scripts/release.mjs      发版助手
 test/                     node --test 测试与 TS 项目
 locale/                  插件元数据（zh / en）
-docs/assets/             README 截图（深色 / 浅色）与自托管徽章
+docs/assets/             README 截图（深色 / 浅色）
 cordis.patch.yml         Bundle patch（插入一行 Host 插件）
 ```
 

@@ -234,7 +234,10 @@ function WalletPanel({ value, error, loading, onRefresh, t }: PanelProps) {
   return (
     <>
       <div className="wp-head">
-        <span className="wp-title">{t('panel.title')}</span>
+        <span className="wp-title">
+          <WalletGlyph />
+          {t('panel.title')}
+        </span>
         <span className="wp-amount" data-wallet-balance={balance.status}>
           {money}
         </span>
@@ -374,7 +377,7 @@ export function WalletPill({ t }: WalletPillProps) {
         onClick={() => setOpen((current) => !current)}
       >
         <WalletGlyph />
-        <span>{label}</span>
+        <span className="wp-label">{label}</span>
         {stale ? <span className="wp-dot" aria-hidden="true" /> : null}
       </button>
 

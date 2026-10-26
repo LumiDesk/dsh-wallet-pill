@@ -1,5 +1,13 @@
 # dsh-wallet-pill
 
+[![npm version](https://img.shields.io/npm/v/dsh-wallet-pill.svg)](https://www.npmjs.com/package/dsh-wallet-pill)
+[![npm downloads](https://img.shields.io/npm/dm/dsh-wallet-pill.svg)](https://www.npmjs.com/package/dsh-wallet-pill)
+[![license](https://img.shields.io/npm/l/dsh-wallet-pill.svg)](LICENSE)
+[![node](https://img.shields.io/badge/node-%3E%3D22-5FA04E?logo=node.js&logoColor=white)](https://nodejs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![DSH](https://img.shields.io/badge/DSH-%3E%3D0.2.1--rc.3-4D6BFE)](https://github.com/deepseek-ai/deepseek-harness)
+[![stars](https://img.shields.io/github/stars/LumiDesk/dsh-wallet-pill.svg)](https://github.com/LumiDesk/dsh-wallet-pill/stargazers)
+
 DeepSeek Harness 的余额胶囊：在输入框下方显示账户余额，点开查看峰谷价目与切换倒计时。零配置、不落盘。
 
 > 非官方社区插件，与 DeepSeek 官方无隶属关系。
@@ -66,6 +74,18 @@ pnpm release patch  # 发版：校验 → 升版本 → 打 tag → npm publish
 ```
 
 Node 22+（本机 24），pnpm 12。客户端产物是 `dist/client.js`，包在 Harness 的 `window.__ModuleLoader__.load(...)` 工厂里；`react` 与 `react-dom` 从页面模块表取，不打包。
+
+## 技术栈
+
+| 层     | 选择                                                                                                                         |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| 语言   | TypeScript（`strict`、`noUncheckedIndexedAccess`），全仓无 `any`                                                             |
+| Host   | Node 22+ ESM，`tsc` 编译到 `dist/index.js`，运行时零依赖                                                                     |
+| Client | React 18（宿主页面模块表提供，不打包）+ esbuild 打成 `__ModuleLoader__` 工厂                                                 |
+| 样式   | 只用宿主 `--dsw-*` 主题 token，无 CSS 框架；浮层复用官方 menu surface（`--dsw-specific-menu` + `--dsw-elevation-prominent`） |
+| 测试   | `node --test` 直接跑 `.ts`（Node 24 类型剥离），39 条用例，零测试框架                                                        |
+| 规范   | ESLint + Prettier + Commitlint（Conventional Commits）+ Husky + lint-staged                                                  |
+| 兼容   | DeepSeek Harness ≥ `0.2.1-rc.3`；**不声明** `@deepseek-ai/dsh-*` 的 peer 依赖（否则会被安装闸门拒绝）                        |
 
 ## 目录
 

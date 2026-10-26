@@ -1,0 +1,9 @@
+{
+  "meta": {
+    "title": "余额胶囊",
+    "description": "在输入框下方显示 DeepSeek 账户余额，点开查看峰谷价目与切换倒计时。零配置、不落盘。"
+  },
+  "pill": {
+    "placeholder": "余额"
+  }
+}

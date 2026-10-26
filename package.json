@@ -1,0 +1,95 @@
+{
+  "name": "dsh-wallet-pill",
+  "version": "0.1.0",
+  "description": "DeepSeek Harness composer-dock wallet pill: account balance plus a peak/off-peak pricing panel.",
+  "license": "MIT",
+  "author": "Talyra42",
+  "type": "module",
+  "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./client": "./dist/client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg"
+  ],
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "balance",
+    "wallet",
+    "pricing",
+    "peak-off-peak"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Talyra42/dsh-wallet-pill.git"
+  },
+  "homepage": "https://github.com/Talyra42/dsh-wallet-pill#readme",
+  "bugs": {
+    "url": "https://github.com/Talyra42/dsh-wallet-pill/issues"
+  },
+  "engines": {
+    "node": ">=22",
+    "dsh": ">=0.2.1-rc.3"
+  },
+  "packageManager": "pnpm@12.15.0",
+  "scripts": {
+    "build": "pnpm run build:host && pnpm run build:client",
+    "build:host": "tsc -p tsconfig.json",
+    "build:client": "node scripts/build-client.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json && tsc -p test/tsconfig.json",
+    "pretest": "pnpm build",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "release": "node scripts/release.mjs",
+    "prepublishOnly": "pnpm build && pnpm test",
+    "prepare": "husky"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.8.1",
+    "@commitlint/config-conventional": "^19.8.1",
+    "@deepseek-ai/cordis": "4.0.5",
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^22.18.0",
+    "@types/react": "^18.3.12",
+    "esbuild": "^0.25.10",
+    "eslint": "^9.39.1",
+    "eslint-config-prettier": "^10.1.8",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.3",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.1"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,mjs,js,json,md,yml,yaml}": [
+      "prettier --write"
+    ],
+    "*.{ts,tsx}": [
+      "eslint --fix"
+    ]
+  }
+}

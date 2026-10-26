@@ -1,0 +1,9 @@
+{
+  "meta": {
+    "title": "Wallet Pill",
+    "description": "Shows your DeepSeek account balance under the composer, with a peak/off-peak pricing panel. No configuration, nothing written to disk."
+  },
+  "pill": {
+    "placeholder": "Balance"
+  }
+}

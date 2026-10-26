@@ -52,6 +52,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "hooks:install": "husky",
+    "version": "pnpm build && git add dist",
     "release": "node scripts/release.mjs",
     "prepublishOnly": "pnpm build && pnpm test"
   },

@@ -15,7 +15,7 @@ scripts/           # build-client.mjs（esbuild 打包）、release.mjs（发版
 test/              # node --test 测试与 TS 项目
 locale/            # 插件元数据（zh / en）
 docs/assets/       # README 截图（深色 / 浅色）
-dist/              # 构建产物，不入库
+dist/              # 入库的构建产物：GitHub 源安装直接使用
 ```
 
 ## Coding Style
@@ -55,9 +55,19 @@ pnpm release patch  # 发版：校验 → 升版本 → 打 tag → npm publish
 
 Client 产物必须保持 `window.__ModuleLoader__.load({id, factory(require){…}})` 包装：`scripts/build-client.mjs` 负责，改全局名时 banner、footer、`globalName` 三处一起改。
 
+## 为什么 dist/ 入库
+
+本插件同时通过 npm 和 GitHub 源分发：
+
+- npm 发布时 `files` 会把 `dist/` 打进 tarball；
+- 1024Store、DSH Hub、DSH-Store 等商店常用 `github:owner/repo` 安装，直接从 Git commit 取文件，不会执行构建；
+- pnpm 12 默认拒绝执行 git 依赖的安装期脚本，不能靠 `prepare` 现场 build。
+
+所以 `dist/` 必须入库。否则 GitHub 源安装能装上，但运行时找不到 `dist/index.js` / `dist/client.js`。改 `src/` 后运行 `pnpm build` 并提交 `dist/`；`pnpm release` 的 `version` 脚本会自动 build 并 `git add dist`。
+
 ## Never 规则
 
-- Never 修改 `dist/` 构建产物；改 `src/` 后重新 `pnpm build`
+- Never 手改 `dist/`：它是入库的构建产物，只通过 `pnpm build` 生成；改 `src/` 后重新 build 并提交
 - Never 修改 `pnpm-lock.yaml`（只有依赖变更才由 pnpm 重写）
 - Never 在组件内使用 `any`
 - Never 使用内联样式（portal 定位坐标除外）

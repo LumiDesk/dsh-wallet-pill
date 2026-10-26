@@ -60,6 +60,12 @@ dsh plugin --profile web add dsh-wallet-pill
 
 需要固定版本时写成 `dsh-wallet-pill@1.0.1`。
 
+也可以直接从 GitHub 源安装（商店生成的命令）：
+
+```bash
+dsh plugin --profile web add github:LumiDesk/dsh-wallet-pill
+```
+
 装好后需要重启 Harness 进程（Host 侧改动不是刷新页面就能生效），再刷新页面。
 
 卸载：
@@ -83,7 +89,9 @@ pnpm release patch  # 发版：校验 → 升版本 → 打 tag → npm publish
 
 Node 22+（本机 24），pnpm 12。客户端产物是 `dist/client.js`，包在 Harness 的 `window.__ModuleLoader__.load(...)` 工厂里；`react` 与 `react-dom` 从页面模块表取，不打包。
 
-仓库不声明 `prepare` 等安装期脚本：pnpm 12 默认拒绝执行 git 依赖的构建脚本，保留它会让 GitHub 源安装报 `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`；git hooks 用 `pnpm hooks:install` 手动装。
+仓库不声明 `prepare` 等安装期脚本：pnpm 12 默认拒绝执行 git 依赖的构建脚本，保留它会让商店生成的 `github:` 安装命令报 `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`；git hooks 用 `pnpm hooks:install` 手动装。
+
+`dist/` 是**入库的构建产物**，不是临时目录：npm tarball 通过 `files` 带上它，商店的 `github:owner/repo` 安装则直接从 commit 取文件、不执行构建，pnpm 也默认拒绝 git 依赖的安装期脚本。不提交 `dist/` 时，GitHub 源安装能装上但找不到 `dist/index.js` / `dist/client.js`。改完 `src/` 后运行 `pnpm build` 并提交 `dist/`；`pnpm release` 的 `version` 脚本会自动 build 并 `git add dist`。
 
 ## 技术栈
 
@@ -110,13 +118,14 @@ src/client/format.ts     金额 / 时长 / 时间格式化
 src/client/locales.ts    zh / en 文案
 scripts/build-client.mjs Client 的 IIFE 打包
 scripts/release.mjs      发版助手
+dist/                    入库的构建产物：npm tarball 与 GitHub 源安装都直接使用
 test/                     node --test 测试与 TS 项目
 locale/                  插件元数据（zh / en）
 docs/assets/             README 截图（深色 / 浅色）
 cordis.patch.yml         Bundle patch（插入一行 Host 插件）
 ```
 
-`dist/` 是构建产物，**不入库**；本地安装前必须先 `pnpm build`。
+`dist/` 已入库：npm tarball 和商店的 GitHub 源安装都直接使用它。改完 `src/` 后必须重新 `pnpm build` 并提交；`pnpm release` 会自动做这一步（原因见[开发](#开发)一节）。
 
 ## 边界
 

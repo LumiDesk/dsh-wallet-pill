@@ -29,11 +29,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Talyra42/dsh-wallet-pill.git"
+    "url": "git+https://github.com/LumiDesk/dsh-wallet-pill.git"
   },
-  "homepage": "https://github.com/Talyra42/dsh-wallet-pill#readme",
+  "homepage": "https://github.com/LumiDesk/dsh-wallet-pill#readme",
   "bugs": {
-    "url": "https://github.com/Talyra42/dsh-wallet-pill/issues"
+    "url": "https://github.com/LumiDesk/dsh-wallet-pill/issues"
   },
   "engines": {
     "node": ">=22",

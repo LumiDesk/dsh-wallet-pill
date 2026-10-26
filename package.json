@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "DeepSeek Harness composer-dock wallet pill: account balance plus a peak/off-peak pricing panel.",
   "license": "MIT",
-  "author": "Talyra42",
+  "author": "Lumi Desk",
   "type": "module",
   "main": "dist/index.js",
   "exports": {

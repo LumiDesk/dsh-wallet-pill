@@ -1,6 +1,6 @@
 {
   "name": "dsh-wallet-pill",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "DeepSeek Harness composer-dock wallet pill: account balance plus a peak/off-peak pricing panel.",
   "license": "MIT",
   "author": "Lumi Desk",

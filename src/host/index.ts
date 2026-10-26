@@ -4,7 +4,7 @@
  * Serves one read-only JSON surface for the Client half:
  *
  *   GET /wallet-pill/state[?refresh=1]  balance + current billing zone + prices
- *   GET /wallet-pill/status             scaffold-era health probe
+ *   GET /wallet-pill/status             health probe
  *
  * Nothing is written to disk and nothing is configurable: the API key comes
  * from the Host credential seam, the price table is compiled in, and the cache
@@ -21,7 +21,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import type { Context } from '@deepseek-ai/cordis'
 
-import { createBalanceReader, type BalanceState } from './balance.ts'
+import { createBalanceReader, type BalanceReader, type BalanceState } from './balance.ts'
 import {
   MODELS,
   PRICE_TABLE_VERSION,
@@ -94,6 +94,17 @@ export interface ErrorEnvelope {
   error: { code: string; message: string }
 }
 
+/** Everything the route needs, so it can be exercised without a Host. */
+export interface RouteDeps {
+  reader: Pick<BalanceReader, 'read'>
+  /**
+   * The Host's trust fence for this request: a status code rejects it, and
+   * `undefined` lets it through.
+   */
+  rejection: (req: IncomingMessage) => number | undefined
+  now?: () => number
+}
+
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.statusCode = status
   res.setHeader('content-type', 'application/json; charset=utf-8')
@@ -145,6 +156,64 @@ export function buildState(balance: BalanceState, nowMs: number): WalletStatePay
 }
 
 /**
+ * Handle one request under this plugin's prefix.
+ *
+ * Order matters: trust fence first (a rejected request learns nothing about the
+ * route), then method, then endpoint. Every response is JSON except the bare
+ * status codes the fence and the method guard produce.
+ *
+ * @param req - the incoming request.
+ * @param res - the response to write.
+ * @param deps - balance reader, trust fence and clock.
+ */
+export async function handleRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  deps: RouteDeps,
+): Promise<void> {
+  const rejection = deps.rejection(req)
+  if (rejection !== undefined) {
+    res.statusCode = rejection
+    res.end()
+    return
+  }
+
+  if (req.method !== 'GET') {
+    res.setHeader('allow', 'GET')
+    res.statusCode = 405
+    res.end()
+    return
+  }
+
+  const endpoint = endpointOf(req.url)
+  if (endpoint === undefined) {
+    sendError(res, 404, 'wallet/bad-request', 'unknown endpoint')
+    return
+  }
+
+  if (endpoint === 'status') {
+    const payload: StatusPayload = {
+      ok: true,
+      value: { name, stage: 'ready', route: ROUTE_PATH },
+    }
+    sendJson(res, 200, payload)
+    return
+  }
+
+  if (endpoint === 'state') {
+    try {
+      const balance = await deps.reader.read(wantsRefresh(req.url))
+      sendJson(res, 200, buildState(balance, (deps.now ?? Date.now)()))
+    } catch {
+      sendError(res, 502, 'wallet/balance-failed', 'balance read failed')
+    }
+    return
+  }
+
+  sendError(res, 404, 'wallet/bad-request', `unknown endpoint ${JSON.stringify(endpoint)}`)
+}
+
+/**
  * Resolve the API key through the Host seam. The key is only ever read inside
  * this process; it never reaches the browser or the response body.
  */
@@ -189,46 +258,11 @@ export function apply(ctx: Context): void {
     const dispose = webServer.register({
       kind: 'prefix',
       path: ROUTE_PATH,
-      handler: async (req, res) => {
-        const rejection = connection.requestRejection(req)
-        if (rejection !== undefined) {
-          res.statusCode = rejection
-          res.end()
-          return
-        }
-        if (req.method !== 'GET') {
-          res.setHeader('allow', 'GET')
-          res.statusCode = 405
-          res.end()
-          return
-        }
-        const endpoint = endpointOf(req.url)
-        if (endpoint === undefined) {
-          sendError(res, 404, 'wallet/bad-request', 'unknown endpoint')
-          return
-        }
-
-        if (endpoint === 'status') {
-          const payload: StatusPayload = {
-            ok: true,
-            value: { name, stage: 'ready', route: ROUTE_PATH },
-          }
-          sendJson(res, 200, payload)
-          return
-        }
-
-        if (endpoint === 'state') {
-          try {
-            const balance = await reader.read(wantsRefresh(req.url))
-            sendJson(res, 200, buildState(balance, Date.now()))
-          } catch {
-            sendError(res, 502, 'wallet/balance-failed', 'balance read failed')
-          }
-          return
-        }
-
-        sendError(res, 404, 'wallet/bad-request', `unknown endpoint ${JSON.stringify(endpoint)}`)
-      },
+      handler: (req, res) =>
+        handleRequest(req, res, {
+          reader,
+          rejection: (request) => connection.requestRejection(request),
+        }),
     })
 
     webCtx.effect(() => dispose, 'wallet-pill: http route')

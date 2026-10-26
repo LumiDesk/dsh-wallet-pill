@@ -296,7 +296,7 @@ function WalletPanel({ value, error, loading, onRefresh, t }: PanelProps) {
         <table className="wp-table">
           <thead>
             <tr>
-              <th scope="col">{t('panel.price.model')}</th>
+              <th scope="col">{t('panel.price.bucket')}</th>
               <th scope="col" data-active={zone === 'off-peak'}>
                 {t('panel.price.offPeak')}
               </th>

@@ -2,52 +2,90 @@
 
 DeepSeek Harness 的余额胶囊：在输入框下方显示账户余额，点开查看峰谷价目与切换倒计时。零配置、不落盘。
 
-> **当前状态：脚手架。** 仓库已搭好 TypeScript 工程、构建链、代码检查、提交校验与测试骨架；
-> Host 只提供一个 `GET /wallet-pill/status` 探针，Client 只渲染一个静态占位胶囊。功能尚未实现。
+> 非官方社区插件，与 DeepSeek 官方无隶属关系。
 
-## 它最终会是什么
+## 它做什么
 
-- **胶囊**：`余额 ¥12.34`，取自 `DEEPSEEK_API_KEY` 对应的账户余额；读不到就整条不渲染。
-- **面板**：点击展开，显示余额、当前是高峰还是空闲时段、下一个切换时刻的倒计时、以及价目表
-  （缓存命中 / 未命中 / 输出 × 峰谷两列），带手动刷新与上次刷新时间。
-- **不做**：不记账、不统计逐轮消耗、不写任何文件、没有配置项。
+**胶囊**（输入框下方，官方统计行之后）
 
-## 开发
+- `余额 ¥12.34` —— 取 `DEEPSEEK_API_KEY` 对应账户的钱包余额；读不到时显示 `余额 —` 并带一个状态点。
+- 没配置 key 时整条不渲染，不占位置。
+- 点击展开面板，`aria-haspopup="dialog"`，Esc 或点击外部关闭，焦点回到胶囊。
 
-```bash
-pnpm install        # 安装依赖，并装好 git hooks
-pnpm build          # host（tsc）+ client（esbuild）都构建
-pnpm typecheck      # host / client / test 三个 tsconfig 各过一遍
-pnpm lint           # eslint
-pnpm test           # node --test，会先自动 build
-pnpm format         # prettier --write
-pnpm release patch  # 发版：校验 → 升版本 → 打 tag → npm publish → 推送 → GitHub Release
-```
+**面板**
 
-Node 22+（本机 24），pnpm 12。客户端产物是 `dist/client.js`，包在 Harness 的
-`window.__ModuleLoader__.load(...)` 工厂里。
+| 区块     | 内容                                                                         |
+| -------- | ---------------------------------------------------------------------------- |
+| 余额     | 总额、充值余额、赠送余额；读取失败时给出可读原因                             |
+| 计费时段 | 当前是高峰还是空闲、下一切换时刻的实时倒计时                                 |
+| 价目     | 缓存命中 / 未命中 / 输出三档，空闲价与高峰价两列，当前时段高亮；多模型可切换 |
+| 底部     | 上次读数时间、价目表版本、手动刷新按钮                                       |
 
-## 目录
+每 60 秒自动刷新一次（页面不可见时暂停），回到页面时立即刷新。
 
-```
-src/host/index.ts        Host 入口：HTTP 路由、信任栅栏、状态探针
-src/client/index.tsx     Client 入口：槽位注册、字典、占位胶囊
-scripts/build-client.mjs Client 的 IIFE 打包
-scripts/release.mjs      发版助手
-test/                     node --test 测试与 TS 项目
-locale/                  插件元数据（zh / en）
-cordis.patch.yml         Bundle patch（插入一行 Host 插件）
-icon.svg                 插件图标
-```
+## 数据与口径
 
-`dist/` 是构建产物，**不入库**；本地安装前必须先 `pnpm build`。
+- **余额**：Host 侧用 `DEEPSEEK_API_KEY` 调 `GET https://api.deepseek.com/user/balance`，60 秒缓存。密钥只在 Host 进程内使用，浏览器只访问本机路由 `/wallet-pill/state`，响应里只有聚合后的金额。
+- **峰谷**：北京时间周一至周五 09:00–12:00、14:00–18:00 为高峰，其余时段（含周末、法定节假日全天）为空闲；高峰价是空闲价的 2 倍。
+- **价目**（CNY / 百万 token）：`deepseek-flash` 0.02 / 1 / 4，`deepseek-v4-pro` 0.15 / 4.5 / 13.5（空闲价；高峰加倍）。来源为 DeepSeek 官方定价页，版本 `2026-09-19`。
 
-## 安装（功能完成后再用）
+官方调价或公布次年放假安排时，改 `src/host/pricing.ts` 里的 `MODELS` / `HOLIDAYS` 与 `PRICE_TABLE_VERSION`，面板上显示的版本号会跟着变。
+
+## 安装
 
 ```bash
 dsh plugin --profile desktop add dsh-wallet-pill
 ```
 
+装好后需要重启 Harness 进程（Host 侧改动不是刷新页面就能生效），再刷新页面。
+
+卸载：
+
+```bash
+dsh plugin --profile desktop remove dsh-wallet-pill
+```
+
+## 开发
+
+```bash
+pnpm install        # 安装依赖，并装好 git hooks
+pnpm build          # host（tsc）+ client（esbuild）
+pnpm typecheck      # host / client / test 三个 tsconfig 各过一遍
+pnpm lint           # eslint
+pnpm test           # node --test，会先自动 build
+pnpm format         # prettier --write
+pnpm release patch  # 发版：校验 → 升版本 → 打 tag → npm publish
+```
+
+Node 22+（本机 24），pnpm 12。客户端产物是 `dist/client.js`，包在 Harness 的 `window.__ModuleLoader__.load(...)` 工厂里；`react` 与 `react-dom` 从页面模块表取，不打包。
+
+## 目录
+
+```
+src/host/index.ts        Host 入口：HTTP 路由、信任栅栏、状态装配
+src/host/balance.ts      余额取数、缓存、错误映射
+src/host/pricing.ts      价目表、峰谷判定、节假日
+src/client/index.tsx     Client 入口：槽位注册、字典、样式注入
+src/client/pill.tsx      胶囊与面板
+src/client/api.ts        状态请求
+src/client/format.ts     金额 / 时长 / 时间格式化
+src/client/locales.ts    zh / en 文案
+scripts/build-client.mjs Client 的 IIFE 打包
+scripts/release.mjs      发版助手
+test/                     node --test 测试与 TS 项目
+locale/                  插件元数据（zh / en）
+cordis.patch.yml         Bundle patch（插入一行 Host 插件）
+```
+
+`dist/` 是构建产物，**不入库**；本地安装前必须先 `pnpm build`。
+
+## 边界
+
+- 只读余额与价目：**不记账、不统计逐轮消耗、不写任何文件、没有配置项**。
+- 只支持 `DEEPSEEK_API_KEY`（在模型设置页填写）：账号登录态不属于本插件的范围。
+- 价目表是静态数据，官方调价必须改代码发版；面板显示版本号，方便判断读到的是哪一版。
+- 无遥测，不向任何第三方发起请求；唯一的出站请求是读取你自己的余额。
+
 ## 许可
 
-MIT。价目表数据来自 DeepSeek 官方定价页。
+MIT。价目表与峰谷规则来自 DeepSeek 官方定价页。

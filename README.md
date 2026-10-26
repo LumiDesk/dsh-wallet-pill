@@ -4,6 +4,14 @@ DeepSeek Harness 的余额胶囊：在输入框下方显示账户余额，点开
 
 > 非官方社区插件，与 DeepSeek 官方无隶属关系。
 
+## 预览
+
+| 深色主题                                                      | 浅色主题                                                       |
+| ------------------------------------------------------------- | -------------------------------------------------------------- |
+| ![深色主题下的余额胶囊与价目面板](docs/assets/panel-dark.png) | ![浅色主题下的余额胶囊与价目面板](docs/assets/panel-light.png) |
+
+胶囊在输入框下方，与官方的「缓存命中 / 轮次」统计条同排；点开是价目面板。
+
 ## 它做什么
 
 **胶囊**（输入框下方，官方统计行之后）
@@ -74,6 +82,7 @@ scripts/build-client.mjs Client 的 IIFE 打包
 scripts/release.mjs      发版助手
 test/                     node --test 测试与 TS 项目
 locale/                  插件元数据（zh / en）
+docs/assets/             README 截图（深色 / 浅色）
 cordis.patch.yml         Bundle patch（插入一行 Host 插件）
 ```
 

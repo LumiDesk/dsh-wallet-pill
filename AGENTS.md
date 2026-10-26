@@ -43,7 +43,8 @@ dist/              # 构建产物，不入库
 ## Build Commands
 
 ```bash
-pnpm install        # 安装依赖并装好 husky hooks
+pnpm install        # 安装依赖
+pnpm hooks:install  # 可选：装 husky git hooks
 pnpm build          # host（tsc）+ client（esbuild）
 pnpm typecheck      # host / client / test 三个 tsconfig 各过一遍
 pnpm lint           # eslint
@@ -68,6 +69,7 @@ Client 产物必须保持 `window.__ModuleLoader__.load({id, factory(require){�
 - Never 写盘或建配置目录：本插件零落盘、零配置项
 - Never 用静态 `export const inject` 取服务（Cordis 会把它当服务名导致静默不激活）；用 `ctx.inject([...])`
 - Never 注册 Host 路由时跳过 `connection.requestRejection(req)`
+- Never 声明 `prepare` / `install` / `postinstall` 等安装期生命周期脚本：pnpm 12 会拒绝对 git 依赖执行构建脚本，商店生成的 GitHub 安装命令会直接失败；git hooks 用 `pnpm hooks:install` 手动装
 - Never 未经用户明确同意把插件安装进任何 DSH profile
 
 ## Commit 规范

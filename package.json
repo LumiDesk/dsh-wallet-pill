@@ -51,9 +51,9 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "hooks:install": "husky",
     "release": "node scripts/release.mjs",
-    "prepublishOnly": "pnpm build && pnpm test",
-    "prepare": "husky"
+    "prepublishOnly": "pnpm build && pnpm test"
   },
   "dsh": {
     "bundle": {

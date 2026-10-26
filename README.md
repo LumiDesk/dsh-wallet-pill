@@ -49,7 +49,7 @@ DeepSeek Harness 的余额胶囊：在输入框下方显示账户余额，点开
 
 ## 安装
 
-已发布到 npm：[`dsh-wallet-pill`](https://www.npmjs.com/package/dsh-wallet-pill)，当前版本 `1.0.0`。
+已发布到 npm：[`dsh-wallet-pill`](https://www.npmjs.com/package/dsh-wallet-pill)，当前版本 `1.0.1`。
 
 ```bash
 # 桌面端
@@ -58,7 +58,7 @@ dsh plugin --profile desktop add dsh-wallet-pill
 dsh plugin --profile web add dsh-wallet-pill
 ```
 
-需要固定版本时写成 `dsh-wallet-pill@1.0.0`。
+需要固定版本时写成 `dsh-wallet-pill@1.0.1`。
 
 装好后需要重启 Harness 进程（Host 侧改动不是刷新页面就能生效），再刷新页面。
 
@@ -71,7 +71,8 @@ dsh plugin --profile desktop remove dsh-wallet-pill
 ## 开发
 
 ```bash
-pnpm install        # 安装依赖，并装好 git hooks
+pnpm install        # 安装依赖
+pnpm hooks:install  # 可选：装 husky git hooks
 pnpm build          # host（tsc）+ client（esbuild）
 pnpm typecheck      # host / client / test 三个 tsconfig 各过一遍
 pnpm lint           # eslint
@@ -81,6 +82,8 @@ pnpm release patch  # 发版：校验 → 升版本 → 打 tag → npm publish
 ```
 
 Node 22+（本机 24），pnpm 12。客户端产物是 `dist/client.js`，包在 Harness 的 `window.__ModuleLoader__.load(...)` 工厂里；`react` 与 `react-dom` 从页面模块表取，不打包。
+
+仓库不声明 `prepare` 等安装期脚本：pnpm 12 默认拒绝执行 git 依赖的构建脚本，保留它会让 GitHub 源安装报 `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`；git hooks 用 `pnpm hooks:install` 手动装。
 
 ## 技术栈
 

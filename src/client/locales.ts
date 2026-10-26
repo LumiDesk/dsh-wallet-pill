@@ -1,0 +1,76 @@
+/**
+ * Client dictionaries. `en` is typed against the `zh` keys, so a missing
+ * translation is a type error rather than an empty label at runtime.
+ */
+
+export type Translate = (key: string, params?: Record<string, string | number>) => string
+
+const zh = {
+  'pill.balance': '余额',
+  'panel.title': '账户余额',
+  'panel.toppedUp': '充值',
+  'panel.granted': '赠送',
+  'panel.zone': '计费时段',
+  'panel.zone.peak': '高峰',
+  'panel.zone.offPeak': '空闲',
+  'panel.zone.switchIn': '{time}后切换',
+  'panel.zone.flat': '暂无切换',
+  'panel.prices': '价目（元 / 百万 token）',
+  'panel.price.model': '模型',
+  'panel.price.offPeak': '空闲',
+  'panel.price.peak': '高峰',
+  'panel.price.hit': '缓存命中',
+  'panel.price.miss': '缓存未命中',
+  'panel.price.out': '输出',
+  'panel.updated': '更新于 {time}',
+  'panel.tableVersion': '价目表 {version}',
+  'panel.refresh': '刷新',
+  'panel.refreshing': '刷新中…',
+  'panel.retry': '重试',
+  'panel.stale': '显示上次读数',
+  'error.noKey': '未配置 DEEPSEEK_API_KEY',
+  'error.timeout': '余额接口超时',
+  'error.network': '无法连接余额接口',
+  'error.malformed': '余额接口返回了无法解析的数据',
+  'error.unauthorized': 'API key 无效或已过期',
+  'error.generic': '读取失败（{code}）',
+  'duration.hour': '{n} 小时',
+  'duration.minute': '{n} 分',
+  'duration.second': '{n} 秒',
+}
+
+const en: Record<keyof typeof zh, string> = {
+  'pill.balance': 'Balance',
+  'panel.title': 'Account balance',
+  'panel.toppedUp': 'Topped up',
+  'panel.granted': 'Granted',
+  'panel.zone': 'Billing window',
+  'panel.zone.peak': 'Peak',
+  'panel.zone.offPeak': 'Off-peak',
+  'panel.zone.switchIn': 'switches in {time}',
+  'panel.zone.flat': 'no switch ahead',
+  'panel.prices': 'Prices (CNY per 1M tokens)',
+  'panel.price.model': 'Model',
+  'panel.price.offPeak': 'Off-peak',
+  'panel.price.peak': 'Peak',
+  'panel.price.hit': 'Cache hit',
+  'panel.price.miss': 'Cache miss',
+  'panel.price.out': 'Output',
+  'panel.updated': 'Updated {time}',
+  'panel.tableVersion': 'Table {version}',
+  'panel.refresh': 'Refresh',
+  'panel.refreshing': 'Refreshing…',
+  'panel.retry': 'Retry',
+  'panel.stale': 'Showing the last reading',
+  'error.noKey': 'DEEPSEEK_API_KEY is not configured',
+  'error.timeout': 'The balance request timed out',
+  'error.network': 'Cannot reach the balance endpoint',
+  'error.malformed': 'The balance endpoint returned an unexpected payload',
+  'error.unauthorized': 'The API key is invalid or expired',
+  'error.generic': 'Read failed ({code})',
+  'duration.hour': '{n}h',
+  'duration.minute': '{n}m',
+  'duration.second': '{n}s',
+}
+
+export const dictionaries: Record<string, Record<string, string>> = { zh, en }

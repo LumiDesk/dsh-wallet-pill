@@ -28,7 +28,7 @@ await build({
   minify: true,
   // The page module table provides these; bundling a second copy of React would
   // bloat the plugin and break context identity.
-  external: ['react', 'react/jsx-runtime'],
+  external: ['react', 'react/jsx-runtime', 'react-dom'],
   legalComments: 'none',
   logLevel: 'info',
   banner: {

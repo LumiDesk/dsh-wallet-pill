@@ -26,6 +26,11 @@ await build({
   jsx: 'automatic',
   // The Host serves this file to every page load; keep the plugin small.
   minify: true,
+  // The pill reports its own build to the Host, which forwards it to Platform
+  // as `x-client-version` on account reads. Inline it like the shipped client.
+  define: {
+    __WALLET_PILL_VERSION__: JSON.stringify(packageJson.version),
+  },
   // The page module table provides these; bundling a second copy of React would
   // bloat the plugin and break context identity.
   external: ['react', 'react/jsx-runtime', 'react-dom'],

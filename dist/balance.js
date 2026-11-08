@@ -1,10 +1,11 @@
 /**
  * Account balance for one DeepSeek API key.
  *
- * The key never leaves the Host: the browser only ever sees the aggregated
- * numbers through this plugin's own route. Reads are cached for a minute so a
- * page refresh or a panel open does not hammer the billing endpoint, and
- * concurrent reads share one request.
+ * This is the API-key route only: the key comes from the Host credential seam
+ * and never leaves the process, and the browser sees the aggregated numbers
+ * through this plugin's own route. The one-minute cache and request folding
+ * live one layer up in `wallet.ts`, because they are shared with the account
+ * route.
  *
  * Endpoint: GET https://api.deepseek.com/user/balance
  * Response: { is_available, balance_infos: [{ currency, total_balance,
@@ -12,7 +13,6 @@
  */
 const DEFAULT_ENDPOINT = 'https://api.deepseek.com/user/balance';
 const DEFAULT_TIMEOUT_MS = 8_000;
-const DEFAULT_TTL_MS = 60_000;
 function decimal(value) {
     if (typeof value !== 'string')
         return undefined;
@@ -62,69 +62,46 @@ export function pickWallet(value) {
  * Build one reader. Everything that touches the outside world is injected, so
  * the unit tests run without a network or a credential store.
  */
-export function createBalanceReader(deps) {
+export function createApiKeyReader(deps) {
     const fetchImpl = deps.fetchImpl ?? fetch;
     const now = deps.now ?? Date.now;
     const endpoint = deps.endpoint ?? DEFAULT_ENDPOINT;
     const timeoutMs = deps.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    const ttlMs = deps.ttlMs ?? DEFAULT_TTL_MS;
-    let cached;
-    let inflight;
-    async function load() {
-        let key;
-        try {
-            key = await deps.resolveKey();
-        }
-        catch {
-            key = undefined;
-        }
-        if (key === undefined || key === '')
-            return { status: 'no-key' };
-        let response;
-        try {
-            response = await fetchImpl(endpoint, {
-                headers: { authorization: `Bearer ${key}`, accept: 'application/json' },
-                signal: AbortSignal.timeout(timeoutMs),
-            });
-        }
-        catch (error) {
-            const name = error?.name;
-            return { status: 'error', code: name === 'TimeoutError' ? 'timeout' : 'network' };
-        }
-        if (!response.ok)
-            return { status: 'error', code: `http-${response.status}` };
-        let body;
-        try {
-            body = await response.json();
-        }
-        catch {
-            return { status: 'error', code: 'malformed' };
-        }
-        const wallet = pickWallet(body);
-        if (wallet === undefined)
-            return { status: 'error', code: 'malformed' };
-        return { status: 'ready', wallet, at: now() };
-    }
     return {
-        async read(force = false) {
-            if (!force) {
-                if (cached !== undefined && now() - cached.at < ttlMs)
-                    return cached.state;
-                if (inflight !== undefined)
-                    return inflight;
-            }
-            const request = load().then((state) => {
-                cached = { at: now(), state };
-                return state;
-            });
-            inflight = request;
+        async read() {
+            let key;
             try {
-                return await request;
+                key = await deps.resolveKey();
             }
-            finally {
-                if (inflight === request)
-                    inflight = undefined;
+            catch {
+                key = undefined;
             }
+            if (key === undefined || key === '')
+                return { kind: 'unavailable' };
+            let response;
+            try {
+                response = await fetchImpl(endpoint, {
+                    headers: { authorization: `Bearer ${key}`, accept: 'application/json' },
+                    signal: AbortSignal.timeout(timeoutMs),
+                });
+            }
+            catch (error) {
+                const name = error?.name;
+                return { kind: 'error', code: name === 'TimeoutError' ? 'timeout' : 'network' };
+            }
+            if (!response.ok)
+                return { kind: 'error', code: `http-${response.status}` };
+            let body;
+            try {
+                body = await response.json();
+            }
+            catch {
+                return { kind: 'error', code: 'malformed' };
+            }
+            const wallet = pickWallet(body);
+            if (wallet === undefined)
+                return { kind: 'error', code: 'malformed' };
+            return { kind: 'ready', wallet, at: now() };
         },
     };
 }

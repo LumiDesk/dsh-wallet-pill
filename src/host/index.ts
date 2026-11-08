@@ -3,12 +3,14 @@
  *
  * Serves one read-only JSON surface for the Client half:
  *
- *   GET /wallet-pill/state[?refresh=1]  balance + current billing zone + prices
- *   GET /wallet-pill/status             health probe
+ *   GET /wallet-pill/state[?refresh=1][&locale=..&tz=..&v=..]  balance + billing zone + prices
+ *   GET /wallet-pill/status                                    health probe
  *
- * Nothing is written to disk and nothing is configurable: the API key comes
- * from the Host credential seam, the price table is compiled in, and the cache
- * lives in memory for one minute.
+ * The balance comes from whichever DeepSeek route pays for the default model:
+ * the browser sign-in wallet (`deepseekAccount`, Host-only) or the API-key
+ * wallet. Nothing is written to disk and nothing is configurable: credentials
+ * come from Host seams, the price table is compiled in, and the one-minute
+ * caches live in memory.
  *
  * Transport note: the plugin registers its own prefix route instead of using
  * `connection.rpc.handle()`. That helper registers through the Connection
@@ -21,7 +23,13 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import type { Context } from '@deepseek-ai/cordis'
 
-import { createBalanceReader, type BalanceReader, type BalanceState } from './balance.ts'
+import {
+  createAccountReader,
+  type AccountClientMetadata,
+  type AccountServiceLike,
+} from './account.ts'
+import { createApiKeyReader } from './balance.ts'
+import { clientMetadataOf } from './metadata.ts'
 import {
   MODELS,
   PRICE_TABLE_VERSION,
@@ -30,6 +38,7 @@ import {
   type ModelPrice,
   type PriceZone,
 } from './pricing.ts'
+import { createWalletReader, type BalanceState } from './wallet.ts'
 
 /** HTTP prefix this plugin owns. The Client half must use the same string. */
 export const ROUTE_PATH = '/wallet-pill'
@@ -43,7 +52,7 @@ export const CREDENTIAL_KEY = 'DEEPSEEK_API_KEY'
 /**
  * The subset of the Host services this plugin uses. Declared locally until a
  * feature needs the upstream package types; importing every `@deepseek-ai/dsh-*`
- * package only to type two methods is not worth the dependency weight.
+ * package only to type a few methods is not worth the dependency weight.
  */
 interface WebServerLike {
   register(route: {
@@ -59,6 +68,11 @@ interface ConnectionLike {
 
 interface CredentialsLike {
   resolve(ref: string): Promise<{ value?: string } | undefined>
+}
+
+/** The part of `agentDefaultModel` that names the route the default model uses. */
+interface ModelSelectionSourceLike {
+  currentSelection(): { provider?: unknown } | undefined
 }
 
 export interface PricingPayload {
@@ -96,13 +110,17 @@ export interface ErrorEnvelope {
 
 /** Everything the route needs, so it can be exercised without a Host. */
 export interface RouteDeps {
-  reader: Pick<BalanceReader, 'read'>
+  wallet: {
+    read(input: { force?: boolean; client: AccountClientMetadata }): Promise<BalanceState>
+  }
   /**
    * The Host's trust fence for this request: a status code rejects it, and
    * `undefined` lets it through.
    */
   rejection: (req: IncomingMessage) => number | undefined
   now?: () => number
+  /** Host-local offset east of UTC, used when the browser sends no `tz`. */
+  offsetSeconds?: () => number
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -132,10 +150,15 @@ export function wantsRefresh(url: string | undefined): boolean {
   return new URL(url ?? '/', 'http://localhost').searchParams.get('refresh') === '1'
 }
 
+/** Host-local offset east of UTC, in seconds. */
+function serverOffsetSeconds(): number {
+  return -new Date().getTimezoneOffset() * 60
+}
+
 /**
  * Assemble the Client payload. Pure so the route and the tests share it.
  *
- * @param balance - latest balance reading, cached or fresh.
+ * @param balance - the wallet reading, from either source.
  * @param nowMs - epoch milliseconds used for the billing zone.
  */
 export function buildState(balance: BalanceState, nowMs: number): WalletStatePayload {
@@ -164,7 +187,7 @@ export function buildState(balance: BalanceState, nowMs: number): WalletStatePay
  *
  * @param req - the incoming request.
  * @param res - the response to write.
- * @param deps - balance reader, trust fence and clock.
+ * @param deps - wallet reader, trust fence and clocks.
  */
 export async function handleRequest(
   req: IncomingMessage,
@@ -202,7 +225,8 @@ export async function handleRequest(
 
   if (endpoint === 'state') {
     try {
-      const balance = await deps.reader.read(wantsRefresh(req.url))
+      const client = clientMetadataOf(req.url, (deps.offsetSeconds ?? serverOffsetSeconds)())
+      const balance = await deps.wallet.read({ force: wantsRefresh(req.url), client })
       sendJson(res, 200, buildState(balance, (deps.now ?? Date.now)()))
     } catch {
       sendError(res, 502, 'wallet/balance-failed', 'balance read failed')
@@ -225,6 +249,35 @@ async function resolveApiKey(ctx: Context): Promise<string | undefined> {
 }
 
 /**
+ * Resolve the account service, or `undefined` when this DSH build has no
+ * account route. Older compositions simply keep the API-key behaviour.
+ */
+function accountServiceOf(ctx: Context): AccountServiceLike | undefined {
+  const service = ctx.get('deepseekAccount') as AccountServiceLike | undefined
+  if (service === undefined) return undefined
+  if (typeof service.getState !== 'function' || typeof service.getBalance !== 'function') {
+    return undefined
+  }
+  return service
+}
+
+/**
+ * Read the provider id of the current default model. Sessions can override the
+ * default selection, so this is the documented approximation the pill uses to
+ * decide which wallet it is spending from.
+ */
+function providerOf(ctx: Context): string | undefined {
+  const model = ctx.get('agentDefaultModel') as ModelSelectionSourceLike | undefined
+  if (model === undefined || typeof model.currentSelection !== 'function') return undefined
+  try {
+    const provider = model.currentSelection()?.provider
+    return typeof provider === 'string' && provider.length > 0 ? provider : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * Register the plugin's Host surface.
  *
  * A profile bundle can be mounted into a running process, so the Web server is
@@ -233,11 +286,18 @@ async function resolveApiKey(ctx: Context): Promise<string | undefined> {
  * handler needs the trust check, and `webServer` alone can activate while
  * `connection` is still booting.
  *
+ * The wallet sources are resolved lazily inside the handler (`ctx.get`), so a
+ * composition without the account service still registers the route.
+ *
  * @param ctx - plugin context; every registration made through it is disposed
  *   when the plugin unloads.
  */
 export function apply(ctx: Context): void {
-  const reader = createBalanceReader({ resolveKey: () => resolveApiKey(ctx) })
+  const wallet = createWalletReader({
+    apiKey: createApiKeyReader({ resolveKey: () => resolveApiKey(ctx) }),
+    account: createAccountReader({ service: () => accountServiceOf(ctx) }),
+    provider: () => providerOf(ctx),
+  })
 
   ctx.inject(['webServer', 'connection'], (webCtx) => {
     let webServer: WebServerLike
@@ -260,7 +320,7 @@ export function apply(ctx: Context): void {
       path: ROUTE_PATH,
       handler: (req, res) =>
         handleRequest(req, res, {
-          reader,
+          wallet,
           rejection: (request) => connection.requestRejection(request),
         }),
     })

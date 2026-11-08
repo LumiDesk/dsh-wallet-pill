@@ -23,6 +23,8 @@ export interface ClientContext {
   locale: {
     register(ns: string, dicts: Record<string, Record<string, string>>): () => void
     bind(ns: string): (key: string, params?: Record<string, string | number>) => string
+    /** Active UI language; absent on older client compositions. */
+    getSnapshot?(): { active: string }
   }
   effect(execute: () => () => unknown, label?: string): unknown
 }
@@ -30,6 +32,24 @@ export interface ClientContext {
 export interface ClientPlugin {
   inject: string[]
   apply(ctx: ClientContext): void
+}
+
+/**
+ * The UI language the account balance call reports. The locale service owns the
+ * active language; the navigator is only a fallback for a composition without
+ * its snapshot, and `en-US` is the last resort.
+ */
+function activeLocaleOf(ctx: ClientContext): string {
+  const snapshot = ctx.locale.getSnapshot?.()
+  if (typeof snapshot?.active === 'string' && snapshot.active.length > 0) return snapshot.active
+  if (
+    typeof navigator !== 'undefined' &&
+    typeof navigator.language === 'string' &&
+    navigator.language.length > 0
+  ) {
+    return navigator.language
+  }
+  return 'en-US'
 }
 
 /**
@@ -55,6 +75,7 @@ export function create(_require: (id: string) => unknown): ClientPlugin {
       }, 'wallet-pill: pill styles')
 
       const t = ctx.locale.bind(NS)
+      const locale = (): string => activeLocaleOf(ctx)
 
       ctx.slots.inject(SLOT, () =>
         ctx.slots.register(
@@ -63,7 +84,7 @@ export function create(_require: (id: string) => unknown): ClientPlugin {
             id: NS,
             order: 2,
             locale: NS,
-            inject: () => ({ t }),
+            inject: () => ({ t, locale }),
           },
           WalletPill,
         ),

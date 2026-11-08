@@ -1,5 +1,8 @@
-import { createBalanceReader } from "./balance.js";
+import { createAccountReader, } from "./account.js";
+import { createApiKeyReader } from "./balance.js";
+import { clientMetadataOf } from "./metadata.js";
 import { MODELS, PRICE_TABLE_VERSION, nextZoneChangeAt, zoneAt, } from "./pricing.js";
+import { createWalletReader } from "./wallet.js";
 /** HTTP prefix this plugin owns. The Client half must use the same string. */
 export const ROUTE_PATH = '/wallet-pill';
 /** Loader entry name; also the display key under the Plugin Manager. */
@@ -31,10 +34,14 @@ export function endpointOf(url) {
 export function wantsRefresh(url) {
     return new URL(url ?? '/', 'http://localhost').searchParams.get('refresh') === '1';
 }
+/** Host-local offset east of UTC, in seconds. */
+function serverOffsetSeconds() {
+    return -new Date().getTimezoneOffset() * 60;
+}
 /**
  * Assemble the Client payload. Pure so the route and the tests share it.
  *
- * @param balance - latest balance reading, cached or fresh.
+ * @param balance - the wallet reading, from either source.
  * @param nowMs - epoch milliseconds used for the billing zone.
  */
 export function buildState(balance, nowMs) {
@@ -62,7 +69,7 @@ export function buildState(balance, nowMs) {
  *
  * @param req - the incoming request.
  * @param res - the response to write.
- * @param deps - balance reader, trust fence and clock.
+ * @param deps - wallet reader, trust fence and clocks.
  */
 export async function handleRequest(req, res, deps) {
     const rejection = deps.rejection(req);
@@ -92,7 +99,8 @@ export async function handleRequest(req, res, deps) {
     }
     if (endpoint === 'state') {
         try {
-            const balance = await deps.reader.read(wantsRefresh(req.url));
+            const client = clientMetadataOf(req.url, (deps.offsetSeconds ?? serverOffsetSeconds)());
+            const balance = await deps.wallet.read({ force: wantsRefresh(req.url), client });
             sendJson(res, 200, buildState(balance, (deps.now ?? Date.now)()));
         }
         catch {
@@ -114,6 +122,36 @@ async function resolveApiKey(ctx) {
     return hit?.value;
 }
 /**
+ * Resolve the account service, or `undefined` when this DSH build has no
+ * account route. Older compositions simply keep the API-key behaviour.
+ */
+function accountServiceOf(ctx) {
+    const service = ctx.get('deepseekAccount');
+    if (service === undefined)
+        return undefined;
+    if (typeof service.getState !== 'function' || typeof service.getBalance !== 'function') {
+        return undefined;
+    }
+    return service;
+}
+/**
+ * Read the provider id of the current default model. Sessions can override the
+ * default selection, so this is the documented approximation the pill uses to
+ * decide which wallet it is spending from.
+ */
+function providerOf(ctx) {
+    const model = ctx.get('agentDefaultModel');
+    if (model === undefined || typeof model.currentSelection !== 'function')
+        return undefined;
+    try {
+        const provider = model.currentSelection()?.provider;
+        return typeof provider === 'string' && provider.length > 0 ? provider : undefined;
+    }
+    catch {
+        return undefined;
+    }
+}
+/**
  * Register the plugin's Host surface.
  *
  * A profile bundle can be mounted into a running process, so the Web server is
@@ -122,11 +160,18 @@ async function resolveApiKey(ctx) {
  * handler needs the trust check, and `webServer` alone can activate while
  * `connection` is still booting.
  *
+ * The wallet sources are resolved lazily inside the handler (`ctx.get`), so a
+ * composition without the account service still registers the route.
+ *
  * @param ctx - plugin context; every registration made through it is disposed
  *   when the plugin unloads.
  */
 export function apply(ctx) {
-    const reader = createBalanceReader({ resolveKey: () => resolveApiKey(ctx) });
+    const wallet = createWalletReader({
+        apiKey: createApiKeyReader({ resolveKey: () => resolveApiKey(ctx) }),
+        account: createAccountReader({ service: () => accountServiceOf(ctx) }),
+        provider: () => providerOf(ctx),
+    });
     ctx.inject(['webServer', 'connection'], (webCtx) => {
         let webServer;
         let connection;
@@ -144,7 +189,7 @@ export function apply(ctx) {
             kind: 'prefix',
             path: ROUTE_PATH,
             handler: (req, res) => handleRequest(req, res, {
-                reader,
+                wallet,
                 rejection: (request) => connection.requestRejection(request),
             }),
         });

@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 
-import { readState, type StatePayload } from './api'
+import { readState, type StatePayload, type WalletSourcePayload } from './api'
 import { formatClock, formatMoney, formatPrice, splitDuration } from './format'
 import type { Translate } from './locales'
 
@@ -19,6 +19,8 @@ const PANEL_MARGIN = 8
 
 export interface WalletPillProps {
   t: Translate
+  /** Active UI language, forwarded with the state request. */
+  locale: () => string
 }
 
 interface WalletView {
@@ -55,30 +57,33 @@ function WalletGlyph() {
 }
 
 /** Poll the Host while the page is visible; expose a manual refresh. */
-function useWalletState(): WalletView & { refresh: () => void } {
+function useWalletState(locale: () => string): WalletView & { refresh: () => void } {
   const [view, setView] = useState<WalletView>({ loading: true })
   const latest = useRef<StatePayload>()
   const alive = useRef(true)
   const inflight = useRef<AbortController>()
 
-  const load = useCallback((refresh: boolean) => {
-    inflight.current?.abort()
-    const controller = new AbortController()
-    inflight.current = controller
-    setView((previous) => ({ ...previous, loading: true }))
+  const load = useCallback(
+    (refresh: boolean) => {
+      inflight.current?.abort()
+      const controller = new AbortController()
+      inflight.current = controller
+      setView((previous) => ({ ...previous, loading: true }))
 
-    readState(refresh, controller.signal)
-      .then((value) => {
-        if (!alive.current || controller.signal.aborted) return
-        latest.current = value
-        setView({ value, loading: false })
-      })
-      .catch((error: unknown) => {
-        if (!alive.current || controller.signal.aborted) return
-        const message = error instanceof Error ? error.message : String(error)
-        setView({ value: latest.current, error: message, loading: false })
-      })
-  }, [])
+      readState({ refresh, locale: locale(), signal: controller.signal })
+        .then((value) => {
+          if (!alive.current || controller.signal.aborted) return
+          latest.current = value
+          setView({ value, loading: false })
+        })
+        .catch((error: unknown) => {
+          if (!alive.current || controller.signal.aborted) return
+          const message = error instanceof Error ? error.message : String(error)
+          setView({ value: latest.current, error: message, loading: false })
+        })
+    },
+    [locale],
+  )
 
   useEffect(() => {
     alive.current = true
@@ -205,6 +210,10 @@ function formatCountdown(ms: number, t: Translate): string {
 }
 
 function balanceErrorText(code: string, t: Translate): string {
+  if (code === 'account-expired') return t('error.accountExpired')
+  if (code === 'account-timeout') return t('error.timeout')
+  if (code === 'account-network') return t('error.network')
+  if (code.startsWith('account-')) return t('error.account')
   if (code === 'timeout') return t('error.timeout')
   if (code === 'network') return t('error.network')
   if (code === 'malformed') return t('error.malformed')
@@ -227,6 +236,8 @@ function WalletPanel({ value, error, loading, onRefresh, t }: PanelProps) {
   const remaining = useCountdown(value.pricing.nextChangeAt)
   const zone = value.pricing.zone
   const balance = value.balance
+  const source: WalletSourcePayload | undefined =
+    balance.status === 'ready' || balance.status === 'error' ? balance.source : undefined
 
   const money =
     balance.status === 'ready' ? formatMoney(balance.wallet.total, balance.wallet.currency) : '—'
@@ -329,6 +340,13 @@ function WalletPanel({ value, error, loading, onRefresh, t }: PanelProps) {
 
       <div className="wp-foot">
         <span className="wp-meta">
+          {source !== undefined ? (
+            <span>
+              {t('panel.source', {
+                source: t(source === 'account' ? 'panel.source.account' : 'panel.source.apiKey'),
+              })}
+            </span>
+          ) : null}
           <span>
             {balance.status === 'ready'
               ? t('panel.updated', { time: formatClock(balance.at) })
@@ -344,8 +362,8 @@ function WalletPanel({ value, error, loading, onRefresh, t }: PanelProps) {
   )
 }
 
-export function WalletPill({ t }: WalletPillProps) {
-  const { value, error, loading, refresh } = useWalletState()
+export function WalletPill({ t, locale }: WalletPillProps) {
+  const { value, error, loading, refresh } = useWalletState(locale)
   const [open, setOpen] = useState(false)
   const pillRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -354,9 +372,9 @@ export function WalletPill({ t }: WalletPillProps) {
   useDismiss(open, pillRef, panelRef, close)
 
   // Nothing to show until the first read lands, and nothing to show at all when
-  // the deployment has no API key.
+  // neither a DeepSeek account sign-in nor an API key is configured.
   if (value === undefined) return null
-  if (value.balance.status === 'no-key') return null
+  if (value.balance.status === 'unconfigured') return null
 
   const stale = error !== undefined || value.balance.status === 'error'
   const label =

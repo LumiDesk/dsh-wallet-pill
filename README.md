@@ -24,8 +24,8 @@ DeepSeek Harness 的余额胶囊：在输入框下方显示账户余额，点开
 
 **胶囊**（输入框下方，官方统计行之后）
 
-- `余额 ¥12.34` —— 取 `DEEPSEEK_API_KEY` 对应账户的钱包余额；读不到时显示 `余额 —` 并带一个状态点。
-- 没配置 key 时整条不渲染，不占位置。
+- `余额 ¥12.34` —— 显示当前推理钱包的余额：DeepSeek 账号登录读账号钱包，`DEEPSEEK_API_KEY` 读 API 钱包；读不到时显示 `余额 —` 并带一个状态点。
+- 账号与 key 都没有时整条不渲染，不占位置。
 - 点击展开面板，`aria-haspopup="dialog"`，Esc 或点击外部关闭，焦点回到胶囊。
 
 **面板**
@@ -35,13 +35,16 @@ DeepSeek Harness 的余额胶囊：在输入框下方显示账户余额，点开
 | 余额     | 总额、充值余额、赠送余额；读取失败时给出可读原因                             |
 | 计费时段 | 当前是高峰还是空闲、下一切换时刻的实时倒计时                                 |
 | 价目     | 缓存命中 / 未命中 / 输出三档，空闲价与高峰价两列，当前时段高亮；多模型可切换 |
-| 底部     | 上次读数时间、价目表版本、手动刷新按钮                                       |
+| 底部     | 余额来源、上次读数时间、价目表版本、手动刷新按钮                             |
 
 每 60 秒自动刷新一次（页面不可见时暂停），回到页面时立即刷新。
 
 ## 数据与口径
 
-- **余额**：Host 侧用 `DEEPSEEK_API_KEY` 调 `GET https://api.deepseek.com/user/balance`，60 秒缓存。密钥只在 Host 进程内使用，浏览器只访问本机路由 `/wallet-pill/state`，响应里只有聚合后的金额。
+- **钱包来源**：胶囊只显示「当前默认模型走哪条路」对应的那个钱包，两条路都是 60 秒缓存。
+  - `deepseek-account`（DeepSeek 账号登录）：Host 侧调 DSH 的 `deepseekAccount` 服务读 Platform 钱包；充值余额与赠金余额分别列出，总额为两者之和。账号凭据只存在于 Host，浏览器拿不到。
+  - `deepseek-official`（`DEEPSEEK_API_KEY`）：Host 侧用 key 调 `GET https://api.deepseek.com/user/balance`。密钥只在 Host 进程内使用，浏览器只访问本机路由 `/wallet-pill/state`，响应里只有聚合后的金额。
+  - 默认模型判断不出钱包时账号优先；偏好的那条路**没有凭据**才换另一条，读失败不会静默换成另一个钱包。
 - **峰谷**：北京时间周一至周五 09:00–12:00、14:00–18:00 为高峰，其余时段（含周末、法定节假日全天）为空闲；高峰价是空闲价的 2 倍。
 - **价目**（CNY / 百万 token）：`deepseek-flash` 0.02 / 1 / 4，`deepseek-v4-pro` 0.15 / 4.5 / 13.5（空闲价；高峰加倍）。来源为 DeepSeek 官方定价页，版本 `2026-09-19`。
 
@@ -101,7 +104,7 @@ Node 22+（本机 24），pnpm 12。客户端产物是 `dist/client.js`，包在
 | Host   | Node 22+ ESM，`tsc` 编译到 `dist/index.js`，运行时零依赖                                                                     |
 | Client | React 18（宿主页面模块表提供，不打包）+ esbuild 打成 `__ModuleLoader__` 工厂                                                 |
 | 样式   | 只用宿主 `--dsw-*` 主题 token，无 CSS 框架；浮层复用官方 menu surface（`--dsw-specific-menu` + `--dsw-elevation-prominent`） |
-| 测试   | `node --test` 直接跑 `.ts`（Node 24 类型剥离），39 条用例，零测试框架                                                        |
+| 测试   | `node --test` 直接跑 `.ts`（Node 24 类型剥离），80 条用例，零测试框架                                                        |
 | 规范   | ESLint + Prettier + Commitlint（Conventional Commits）+ Husky + lint-staged                                                  |
 | 兼容   | DeepSeek Harness ≥ `0.2.1-rc.3`；**不声明** `@deepseek-ai/dsh-*` 的 peer 依赖（否则会被安装闸门拒绝）                        |
 
@@ -109,7 +112,10 @@ Node 22+（本机 24），pnpm 12。客户端产物是 `dist/client.js`，包在
 
 ```
 src/host/index.ts        Host 入口：HTTP 路由、信任栅栏、状态装配
-src/host/balance.ts      余额取数、缓存、错误映射
+src/host/wallet.ts       两条钱包路线的选择、回退与缓存
+src/host/account.ts      账号钱包取数与归一化
+src/host/balance.ts      API Key 余额取数与错误映射
+src/host/metadata.ts     客户端身份参数的校验
 src/host/pricing.ts      价目表、峰谷判定、节假日
 src/client/index.tsx     Client 入口：槽位注册、字典、样式注入
 src/client/pill.tsx      胶囊与面板
@@ -130,7 +136,8 @@ cordis.patch.yml         Bundle patch（插入一行 Host 插件）
 ## 边界
 
 - 只读余额与价目：**不记账、不统计逐轮消耗、不写任何文件、没有配置项**。
-- 只支持 `DEEPSEEK_API_KEY`（在模型设置页填写）：账号登录态不属于本插件的范围。
+- 钱包来源跟随**默认模型**的 provider；某个会话里临时切换 provider 时，胶囊仍显示默认钱包。
+- 账号钱包依赖 DSH 的 `deepseekAccount` 服务（`dsh-base` 自带）；更老的 DSH 上没有它时自动退回 API Key 路径。
 - 价目表是静态数据，官方调价必须改代码发版；面板显示版本号，方便判断读到的是哪一版。
 - 无遥测，不向任何第三方发起请求；唯一的出站请求是读取你自己的余额。
 

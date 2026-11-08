@@ -1,6 +1,6 @@
 /**
- * Route contract and payload assembly. The balance reader and the clock are
- * pure inputs here, so no network or filesystem is touched.
+ * Route constants and payload assembly. The wallet reading and the clock are
+ * pure inputs here, so no credential store, network or filesystem is touched.
  */
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
@@ -13,9 +13,11 @@ import {
   name,
   wantsRefresh,
 } from '../src/host/index.ts'
+import type { BalanceState } from '../src/host/wallet.ts'
 
-const ready = {
-  status: 'ready' as const,
+const ready: BalanceState = {
+  status: 'ready',
+  source: 'api-key',
   wallet: { currency: 'CNY', total: '6.19', granted: '0.00', toppedUp: '6.19' },
   at: 1_000,
 }
@@ -58,7 +60,7 @@ test('a peak reading reports the peak zone and the next edge', () => {
   assert.equal(payload.ok, true)
   assert.equal(payload.value.pricing.zone, 'peak')
   assert.equal(payload.value.pricing.nextChangeAt, Date.UTC(2026, 9, 26, 4, 0, 0)) // 12:00 Beijing
-  assert.equal(payload.value.balance, ready)
+  assert.deepEqual(payload.value.balance, ready)
   assert.equal(payload.value.now, PEAK_NOW)
 })
 
@@ -68,10 +70,25 @@ test('an off-peak reading reports the off-peak zone', () => {
   assert.equal(payload.value.pricing.nextChangeAt, Date.UTC(2026, 9, 26, 6, 0, 0)) // 14:00 Beijing
 })
 
-test('pricing is served even when the balance cannot be read', () => {
-  const payload = buildState({ status: 'no-key' }, PEAK_NOW)
-  assert.deepEqual(payload.value.balance, { status: 'no-key' })
+test('pricing is served even when no wallet is configured', () => {
+  const payload = buildState({ status: 'unconfigured' }, PEAK_NOW)
+  assert.deepEqual(payload.value.balance, { status: 'unconfigured' })
   assert.equal(payload.value.pricing.zone, 'peak')
   assert.equal(payload.value.pricing.models.length, 2)
   assert.equal(payload.value.pricing.currency, 'CNY')
+})
+
+test('the account source travels with the reading', () => {
+  const account: BalanceState = {
+    status: 'ready',
+    source: 'account',
+    wallet: { currency: 'CNY', total: '12.34', granted: '2', toppedUp: '10.34' },
+    at: 2_000,
+  }
+  assert.equal(buildState(account, PEAK_NOW).value.balance.status, 'ready')
+  const payload = buildState(account, PEAK_NOW)
+  assert.equal(
+    payload.value.balance.status === 'ready' ? payload.value.balance.source : '',
+    'account',
+  )
 })

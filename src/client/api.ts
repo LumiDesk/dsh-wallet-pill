@@ -1,6 +1,7 @@
 /**
  * Wire types for the Host's read-only surface. The Host declares the same shapes
- * in `src/host/index.ts`; keep the two in sync when a field changes.
+ * in `src/host/index.ts` and `src/host/wallet.ts`; keep them in sync when a
+ * field changes.
  */
 
 export interface BalanceWalletPayload {
@@ -10,10 +11,14 @@ export interface BalanceWalletPayload {
   toppedUp: string
 }
 
+/** Which DeepSeek route the balance belongs to. */
+export type WalletSourcePayload = 'account' | 'api-key'
+
 export type BalancePayload =
-  | { status: 'ready'; wallet: BalanceWalletPayload; at: number }
-  | { status: 'no-key' }
-  | { status: 'error'; code: string }
+  | { status: 'ready'; source: WalletSourcePayload; wallet: BalanceWalletPayload; at: number }
+  /** Neither route has a credential; the pill hides itself. */
+  | { status: 'unconfigured' }
+  | { status: 'error'; source: WalletSourcePayload; code: string }
 
 export type PriceZone = 'peak' | 'off-peak'
 
@@ -47,15 +52,31 @@ interface StateEnvelope {
   error?: { code?: string; message?: string }
 }
 
+export interface StateRequest {
+  /** Bypass the Host cache (the panel's refresh button). */
+  refresh: boolean
+  /** Active UI language, forwarded to the account balance call. */
+  locale: string
+  /** Aborts the request when the component unmounts or polls again. */
+  signal?: AbortSignal
+}
+
 /**
  * Read one state payload.
  *
- * @param refresh - bypass the Host cache (the panel's refresh button).
- * @param signal - aborts the request when the component unmounts.
+ * @param request - cache intent, UI language and abort signal.
  */
-export async function readState(refresh: boolean, signal?: AbortSignal): Promise<StatePayload> {
-  const url = `${STATE_ROUTE}?refresh=${refresh ? '1' : '0'}`
-  const response = await fetch(url, { signal, headers: { accept: 'application/json' } })
+export async function readState(request: StateRequest): Promise<StatePayload> {
+  const params = new URLSearchParams({
+    refresh: request.refresh ? '1' : '0',
+    locale: request.locale,
+    tz: String(-new Date().getTimezoneOffset() * 60),
+    v: __WALLET_PILL_VERSION__,
+  })
+  const response = await fetch(`${STATE_ROUTE}?${params.toString()}`, {
+    signal: request.signal,
+    headers: { accept: 'application/json' },
+  })
   if (!response.ok) throw new Error(`state ${response.status}`)
   const body = (await response.json()) as StateEnvelope
   if (body.ok !== true || body.value === undefined) {

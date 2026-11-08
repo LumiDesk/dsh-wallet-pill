@@ -1,13 +1,15 @@
 /**
  * Route contract: trust fence first, then method, then endpoint, then payload.
- * The reader, the fence and the clock are all injected, so this file covers the
- * HTTP surface without a Host process.
+ * The wallet reader, the fence and the clocks are all injected, so this file
+ * covers the HTTP surface without a Host process.
  */
 import assert from 'node:assert/strict'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { test } from 'node:test'
 
+import type { AccountClientMetadata } from '../src/host/account.ts'
 import { handleRequest, type RouteDeps } from '../src/host/index.ts'
+import type { BalanceState } from '../src/host/wallet.ts'
 
 interface Captured {
   status: number
@@ -38,17 +40,19 @@ function response(): { res: ServerResponse; captured: Captured } {
   return { res: res as unknown as ServerResponse, captured }
 }
 
-const ready = {
-  status: 'ready' as const,
+const ready: BalanceState = {
+  status: 'ready',
+  source: 'api-key',
   wallet: { currency: 'CNY', total: '6.19', granted: '0', toppedUp: '6.19' },
   at: 1_000,
 }
 
 function deps(overrides: Partial<RouteDeps> = {}): RouteDeps {
   return {
-    reader: { read: async () => ready },
+    wallet: { read: async () => ready },
     rejection: () => undefined,
     now: () => Date.UTC(2026, 9, 26, 2, 0, 0), // Monday 10:00 Beijing
+    offsetSeconds: () => 28_800,
     ...overrides,
   }
 }
@@ -62,7 +66,7 @@ test('a trusted GET returns the state payload', async () => {
   assert.equal(captured.headers['cache-control'], 'no-store')
   const body = JSON.parse(captured.body) as {
     ok: boolean
-    value: { balance: unknown; pricing: { zone: string } }
+    value: { balance: BalanceState; pricing: { zone: string } }
   }
   assert.equal(body.ok, true)
   assert.deepEqual(body.value.balance, ready)
@@ -71,31 +75,55 @@ test('a trusted GET returns the state payload', async () => {
 
 test('refresh=1 reaches the reader, everything else does not', async () => {
   const seen: boolean[] = []
-  const reader = {
-    read: async (force?: boolean) => {
-      seen.push(force === true)
+  const wallet = {
+    read: async (input: { force?: boolean }): Promise<BalanceState> => {
+      seen.push(input.force === true)
       return ready
     },
   }
 
   const first = response()
-  await handleRequest(request('GET', '/wallet-pill/state?refresh=1'), first.res, deps({ reader }))
+  await handleRequest(request('GET', '/wallet-pill/state?refresh=1'), first.res, deps({ wallet }))
   const second = response()
-  await handleRequest(request('GET', '/wallet-pill/state'), second.res, deps({ reader }))
+  await handleRequest(request('GET', '/wallet-pill/state'), second.res, deps({ wallet }))
 
   assert.deepEqual(seen, [true, false])
 })
 
+test('browser metadata reaches the wallet reader', async () => {
+  const seen: AccountClientMetadata[] = []
+  const wallet = {
+    read: async (input: { client: AccountClientMetadata }): Promise<BalanceState> => {
+      seen.push(input.client)
+      return ready
+    },
+  }
+
+  const first = response()
+  await handleRequest(
+    request('GET', '/wallet-pill/state?locale=zh-CN&tz=28800&v=1.1.0'),
+    first.res,
+    deps({ wallet }),
+  )
+  const second = response()
+  await handleRequest(request('GET', '/wallet-pill/state'), second.res, deps({ wallet }))
+
+  assert.deepEqual(seen, [
+    { version: '1.1.0', locale: 'zh-CN', timezoneOffsetSeconds: 28_800 },
+    { version: '0.0.0', locale: 'en-US', timezoneOffsetSeconds: 28_800 },
+  ])
+})
+
 test('the status probe answers without touching the reader', async () => {
   let reads = 0
-  const reader = {
-    read: async () => {
+  const wallet = {
+    read: async (): Promise<BalanceState> => {
       reads += 1
       return ready
     },
   }
   const { res, captured } = response()
-  await handleRequest(request('GET', '/wallet-pill/status'), res, deps({ reader }))
+  await handleRequest(request('GET', '/wallet-pill/status'), res, deps({ wallet }))
 
   assert.equal(captured.status, 200)
   assert.equal(reads, 0)
@@ -135,7 +163,7 @@ test('a reader failure surfaces as 502 without leaking the reason', async () => 
     request('GET', '/wallet-pill/state'),
     res,
     deps({
-      reader: {
+      wallet: {
         read: async () => {
           throw new Error('sk-secret exploded')
         },
